@@ -2,7 +2,7 @@
 Empty C++ Repository Sandbox
 
 ## Setup
-If CMake is not already installed on your system, go to [https://cmake.org/download/#latest], scroll down to the **Binary distributions** section, and find the installer script (.msi or .sh) appropriate for your system.
+If CMake is not already installed on your system, go to https://cmake.org/download/#latest, scroll down to the **Binary distributions** section, and find the installer script (.msi or .sh) appropriate for your system.
 
 ## How to use
 Create your classes and higher level functions as needed using header and source files and place them in their appropriate folders.
@@ -53,4 +53,4 @@ A shell/batch script to build all configures code in the build folder using the 
 
 | Option                | Description                                                                   |
 | :-------------------- | :---------------------------------------------------------------------------- |
-| ALL                   | Attempt to build the files concurrently with 60% of the available CPU threads |
+| -a (--all)            | Attempt to build the files concurrently with 60% of the available CPU threads |
