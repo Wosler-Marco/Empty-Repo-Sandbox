@@ -3,6 +3,11 @@ Empty C++ Repository Sandbox
 
 ## Setup
 If CMake is not already installed on your system, go to https://cmake.org/download/#latest, scroll down to the **Binary distributions** section, and find the installer script (.msi or .sh) appropriate for your system.
+If MinGW is not already installed on your system, run the command
+
+    sudo apt-get install gcc-mingw-w64
+
+in the terminal for Linux. For Windows, install MSYS2 via https://www.msys2.org, following the instructions which will also guide you through installing mingw (Step 6).
 
 ## How to use
 Create your classes and higher level functions as needed using header and source files and place them in their appropriate folders.
@@ -10,12 +15,14 @@ Use *sandbox.cpp* to contain any of your main executable code. Any .cpp files pl
 To configure and build your code, go to the terminal and use the configure and build scripts (.bat for Windows and .sh for Linux/MacOS). The options for building are defined below in the **Repository Structure** section if desired.
 
 Test that you have understood this by compiling the *sandbox.cpp* script right now and running it. Your console should have the following:
+
     .\configure.bat     OR      ./configure.sh
     .\build.bat         OR      ./build.sh
     .\build\bin\sandbox.exe
     >   Sandbox running...
 
 You can also test running a test script as follows:
+
     .\configure.bat -t  OR      ./configure.sh -t
     .\build.bat         OR      ./build.sh
     .\build\bin\sample_test.exe
