@@ -2,12 +2,20 @@
 Empty C++ Repository Sandbox
 
 ## Setup
-If CMake is not already installed on your system, go to https://cmake.org/download/#latest, scroll down to the **Binary distributions** section, and find the installer script (.msi or .sh) appropriate for your system.
-If MinGW is not already installed on your system, run the command
+If CMake and GCC are not already installed on your system, for Linux run the commands
 
-    sudo apt-get install gcc-mingw-w64
+    sudo apt update
+    sudo apt install cmake
+    sudo apt install build-essential gdb
 
-in the terminal for Linux. For Windows, install MSYS2 via https://www.msys2.org, following the instructions which will also guide you through installing mingw (Step 6).
+in the terminal. For Windows, install MSYS2 via https://www.msys2.org, following the instructions up to Step 4. Open the MSYS2 terminal with the MSYS environment (run **MSYS2 MSYS**) and run the following commands:
+
+    pacman -S mingw-w64-x86_64-cmake
+    pacman -S mingw-w64-x86_64-gcc
+    pacman -S mingw-w64-x86_64-make
+    pacman -S mingw-w64-x86_64-gdb
+
+As those are installing or once they are installed, add 'C:\msys64\mingw64\bin' and 'C:\msys64\usr\bin' to the path (Search for 'Environment Variables' > 'Edit the system environment variables' > Environment Variables > System Variables > find and select the variable 'Path' > Edit > New)
 
 ## How to use
 Create your classes and higher level functions as needed using header and source files and place them in their appropriate folders.
