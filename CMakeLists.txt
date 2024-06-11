@@ -33,21 +33,50 @@ else()
   message(FATAL_ERROR "Unknown OS!")
 endif()
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/inc)
+include_directories(
+  ${CMAKE_CURRENT_SOURCE_DIR}/inc
+  ${CMAKE_CURRENT_SOURCE_DIR}/external
+)
 
-# add src collection
-#
-#
-#
-#
+# Set the path to your AWS SDK build
+set(AWS_SDK_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/external/aws-cpp-sdk-all)
 
+# Add AWS SDK lib to path for find_package
+set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${AWS_SDK_ROOT}/lib/cmake/)
+set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${AWS_SDK_ROOT}/lib/)
+
+find_package(PkgConfig REQUIRED)
+# pkg_search_module(gstreamer REQUIRED IMPORTED_TARGET gstreamer-1.0>=1.4)
+# pkg_search_module(gstreamer-sdp REQUIRED IMPORTED_TARGET gstreamer-sdp-1.0>=1.4)
+# pkg_search_module(gstreamer-app REQUIRED IMPORTED_TARGET gstreamer-app-1.0>=1.4)
+# pkg_search_module(gstreamer-video REQUIRED IMPORTED_TARGET gstreamer-video-1.0>=1.4)
+# find_package(gstreamer REQUIRED COMPONENTS sdp app video)
+
+# Source files
+file(GLOB_RECURSE SRC_FILES src/*.cpp)
+
+# Find Threads library
 find_package(Threads REQUIRED)
 
+# Find AWS SDK + dependencies
+find_package(ZLIB REQUIRED)
+find_package(AWSSDK REQUIRED COMPONENTS core kinesisvideo)
+
+# Include directories
+include_directories(${AWSSDK_INCLUDE_DIR})
+link_directories(${AWSSDK_LIB_DIR})
+
 # Add main.cpp executable
-add_executable(sandbox ${CMAKE_CURRENT_SOURCE_DIR}/sandbox.cpp)
+add_executable(sandbox ${CMAKE_CURRENT_SOURCE_DIR}/sandbox.cpp  ${SRC_FILES})
 
 # Link libraries and include directories as needed for main
 target_link_libraries(sandbox Threads::Threads)
+# target_link_libraries(sandbox PkgConfig::gstreamer
+#                               PkgConfig::gstreamer-sdp
+#                               PkgConfig::gstreamer-app
+#                               PkgConfig::gstreamer-video
+# )
+target_link_libraries(sandbox ZLIB::ZLIB aws-cpp-sdk-kinesisvideo)
 
 if(BUILD_TESTS)
   # Find all test source files
@@ -57,9 +86,15 @@ if(BUILD_TESTS)
   foreach( testsourcefile ${APP_SOURCES} )
     if(NOT testsourcefile MATCHES "gtest_.*\\.cpp")
       get_filename_component(testname ${testsourcefile} NAME_WE)
-      add_executable(${testname} ${testsourcefile})
+      add_executable(${testname} ${testsourcefile}  ${SRC_FILES})
 
       target_link_libraries( ${testname} Threads::Threads )
+      # target_link_libraries(${testname} PkgConfig::gstreamer
+      #                                   PkgConfig::gstreamer-sdp
+      #                                   PkgConfig::gstreamer-app
+      #                                   PkgConfig::gstreamer-video
+      # )
+      target_link_libraries(${testname} ZLIB::ZLIB aws-cpp-sdk-kinesisvideo)
 
       if(UNIX)
         target_link_libraries(${testname})
@@ -91,7 +126,7 @@ if(BUILD_TESTS OR BUILD_UNIT_TESTS)
 
   # Discover any Google Tests within the Google Test source files
   if(GTEST_SOURCES)
-    add_executable(gtest_runner ${GTEST_SOURCES})
+    add_executable(gtest_runner ${GTEST_SOURCES} ${SRC_FILES})
     target_link_libraries( gtest_runner GTest::gtest_main GTest::gmock )
     include(GoogleTest)
     gtest_discover_tests(gtest_runner)
