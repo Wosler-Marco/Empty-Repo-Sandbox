@@ -1,18 +1,24 @@
 cmake_minimum_required(VERSION 3.14 FATAL_ERROR)
 
-add_definitions(-std=c++17)
 
+# Set the project name and version
+project(wosler_cpp_sandbox LANGUAGES C CXX)
+
+# Set the C++ standard
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CXX_FLAGS "-Wall")
 set(CMAKE_CXX_FLAGS "${CXX_FLAGS} -O1")
 set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-
+#set(CMAKE_AUTOMOC ON)
 if(CMAKE_VERSION VERSION_GREATER "3.24.0")
   cmake_policy(SET CMP0135 NEW)
 endif()
 
-project(wosler_cpp_sandbox)
+
+set(KINESIS_VIDEO_WEBRTC_CLIENT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/external")
 
 # Check which options have been provided
 option(ENABLE_DEBUG "Enable debug mode" OFF)
@@ -33,21 +39,135 @@ else()
   message(FATAL_ERROR "Unknown OS!")
 endif()
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/inc)
+include_directories(
+  ${CMAKE_CURRENT_SOURCE_DIR}/inc
+  ${CMAKE_CURRENT_SOURCE_DIR}/external
+  ${CMAKE_CURRENT_SOURCE_DIR}/Utils/inc
+  ${CMAKE_CURRENT_SOURCE_DIR}/SonoStationGUI/inc
+)
 
-# add src collection
-#
-#
-#
-#
+add_subdirectory(${CMAKE_SOURCE_DIR}/SonoStationGUI)
 
 find_package(Threads REQUIRED)
+find_package(PkgConfig REQUIRED)
 
-# Add main.cpp executable
-add_executable(sandbox ${CMAKE_CURRENT_SOURCE_DIR}/sandbox.cpp)
+# Find all AWS dependency libraries
+find_package(OpenSSL REQUIRED)
+find_library(SRTP_LIBRARIES srtp2 REQUIRED )
+find_library(USRSCTP_LIBRARIES usrsctp REQUIRED)
+find_package(OpenCV REQUIRED)
+find_package(Qt6 COMPONENTS Core Widgets REQUIRED)
 
+find_package(VTK COMPONENTS
+  CommonColor
+  CommonCore
+  IOGeometry
+  GUISupportQt
+REQUIRED)
+
+find_package(jsoncpp REQUIRED)
+pkg_check_modules(LIBWEBSOCKETS REQUIRED libwebsockets)
+pkg_check_modules(GST gstreamer-1.0)
+
+pkg_check_modules(GLIB2 REQUIRED glib-2.0)
+pkg_check_modules(GST_APP REQUIRED gstreamer-app-1.0)
+pkg_check_modules(GOBJ2 REQUIRED gobject-2.0)
+message("gstreamer found. Will build gstreamer samples")
+
+set(EXTERN_INCLUDE_DIRS
+${EXTERN_INCLUDE_DIRS} ${GLIB2_INCLUDE_DIRS} ${GST_INCLUDE_DIRS}
+${GST_APP_INCLUDE_DIRS} ${GOBJ2_INCLUDE_DIRS} )
+
+set(GST_SAMPLE_LIBRARIES ${GLIB2_LIBRARIES} ${GST_LIBRARIES}
+                   ${GST_APP_LIBRARIES} ${GOBJ2_LIBRARIES} ${Intl})
+link_directories(
+${GLIB2_LIBRARY_DIRS} 
+${GST_LIBRARY_DIRS}
+${GST_APP_LIBRARY_DIRS}
+${GOBJ2_LIBRARY_DIRS})
+
+include_directories(${EXTERN_INCLUDE_DIRS})
+include_directories(${OpenCV_INCLUDE_DIRS} ${Qt6_INCLUDE_DIRS})
+set(KVS_LIBS 
+     ${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/lib/libkvsWebrtcClient.so
+     ${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/lib/libkvsWebrtcSignalingClient.so
+     ${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/lib/libkvsWebRtcThreadpool.so
+     ${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/lib/libkvsCommonLws.so
+     ${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/lib/libkvspic.a
+     ${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/lib/libkvspicClient.a
+     ${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/lib/libkvspicState.a
+     ${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/lib/libkvspicUtils.a
+     )
+include_directories(
+ ${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/include
+)
+
+link_directories(${LIBSRTP_LIBRARY_DIRS})
+link_directories(${LIBWEBSOCKETS_LIBRARY_DIRS})
+
+
+add_executable(
+    simpleMaster
+    src/Common.c
+    simpleMaster.c
+    src/GstAudioVideoReceiver_video.cpp
+  )
+ target_link_libraries(simpleMaster 
+ ${EXTRA_DEPS} 
+ ${GST_SAMPLE_LIBRARIES} 
+ ${KVS_LIBS}                               
+ ${OPENSSL_LIBRARIES}
+ ${LIBWEBSOCKETS_LIBRARIES}
+  ${OpenCV_LIBS})
+
+add_executable(
+    simpleVVideo
+    src/Common.c
+    src/GstAudioVideoReceiver_video.cpp
+    simpleViewer_withvideo.cpp
+  )
+ target_link_libraries(simpleVVideo 
+ ${EXTRA_DEPS} 
+ ${GST_SAMPLE_LIBRARIES} 
+ ${KVS_LIBS}                               
+ ${OPENSSL_LIBRARIES}
+ ${SRTP_LIBRARIES}
+ ${USRSCTP_LIBRARIES}
+ ${LIBWEBSOCKETS_LIBRARIES}
+ ${OpenCV_LIBS})
+ 
+ target_compile_options(simpleVVideo PRIVATE -fpermissive)
+ target_compile_options(simpleMaster PRIVATE -fpermissive)
+ 
+#  add_executable(
+#   simpleViewer
+#   src/Common.c
+#   src/GstAudioVideoReceiver.cpp
+#   simpleViewer.cpp
+#   SonoStationGUI/inc/CameraDemo.hpp
+#   SonoStationGUI/inc/CameraStreamingWidget.hpp
+# )
+# target_link_libraries(simpleViewer 
+# ${EXTRA_DEPS} 
+# ${GST_SAMPLE_LIBRARIES} 
+# ${KVS_LIBS}                               
+# ${OPENSSL_LIBRARIES}
+# ${SRTP_LIBRARIES}
+# ${USRSCTP_LIBRARIES}
+# ${LIBWEBSOCKETS_LIBRARIES}
+# ${OpenCV_LIBS}
+# Qt6::Core Qt6::Widgets
+# Threads::Threads 
+# ${VTK_LIBRARIES})
+
+# target_compile_options(simpleViewer PRIVATE -fpermissive)
+
+#add_executable(test src/callback.cpp test.cpp)
+#target_link_libraries(test ${GST_SAMPLE_LIBRARIES})
 # Link libraries and include directories as needed for main
-target_link_libraries(sandbox Threads::Threads)
+# Add main.cpp executable
+# add_executable(sandbox ${CMAKE_CURRENT_SOURCE_DIR}/sandbox.cpp )
+# target_link_libraries(sandbox Threads::Threads)
 
 if(BUILD_TESTS)
   # Find all test source files
@@ -97,3 +217,8 @@ if(BUILD_TESTS OR BUILD_UNIT_TESTS)
     gtest_discover_tests(gtest_runner)
   endif()
 endif()
+
+#get_property(dirs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
+#foreach(dir ${dirs})
+#  message(STATUS "Include directory: ${dir}")
+#endforeach()
