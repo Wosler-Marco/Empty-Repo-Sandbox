@@ -59,3 +59,8 @@ build/
 *.txt
 !dependencies*.txt
 !CMakeLists.txt
+
+# AWS temp files
+kvsFile*
+*.mkv
+.SignalingCache*
