@@ -42,11 +42,8 @@ endif()
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/inc
   ${CMAKE_CURRENT_SOURCE_DIR}/external
-  ${CMAKE_CURRENT_SOURCE_DIR}/Utils/inc
-  ${CMAKE_CURRENT_SOURCE_DIR}/SonoStationGUI/inc
 )
 
-add_subdirectory(${CMAKE_SOURCE_DIR}/SonoStationGUI)
 
 find_package(Threads REQUIRED)
 find_package(PkgConfig REQUIRED)
@@ -138,36 +135,6 @@ add_executable(
  
  target_compile_options(simpleVVideo PRIVATE -fpermissive)
  target_compile_options(simpleMaster PRIVATE -fpermissive)
- 
-#  add_executable(
-#   simpleViewer
-#   src/Common.c
-#   src/GstAudioVideoReceiver.cpp
-#   simpleViewer.cpp
-#   SonoStationGUI/inc/CameraDemo.hpp
-#   SonoStationGUI/inc/CameraStreamingWidget.hpp
-# )
-# target_link_libraries(simpleViewer 
-# ${EXTRA_DEPS} 
-# ${GST_SAMPLE_LIBRARIES} 
-# ${KVS_LIBS}                               
-# ${OPENSSL_LIBRARIES}
-# ${SRTP_LIBRARIES}
-# ${USRSCTP_LIBRARIES}
-# ${LIBWEBSOCKETS_LIBRARIES}
-# ${OpenCV_LIBS}
-# Qt6::Core Qt6::Widgets
-# Threads::Threads 
-# ${VTK_LIBRARIES})
-
-# target_compile_options(simpleViewer PRIVATE -fpermissive)
-
-#add_executable(test src/callback.cpp test.cpp)
-#target_link_libraries(test ${GST_SAMPLE_LIBRARIES})
-# Link libraries and include directories as needed for main
-# Add main.cpp executable
-# add_executable(sandbox ${CMAKE_CURRENT_SOURCE_DIR}/sandbox.cpp )
-# target_link_libraries(sandbox Threads::Threads)
 
 if(BUILD_TESTS)
   # Find all test source files
