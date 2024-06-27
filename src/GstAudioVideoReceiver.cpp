@@ -9,6 +9,7 @@ static BOOL eos = FALSE;
 
 static CallbackFn setupPipelineCallback = nullptr;
 void registerSetupPipelineCallback(CallbackFn fn) {
+     g_print("Callback FN: Registered \n");
     setupPipelineCallback = fn;
 }
 
@@ -126,7 +127,7 @@ PVOID receiveGstreamerAudioVideo(PVOID args)
         roleType = "Master";
     }
 
-    // CHK_ERR(gst_init_check(NULL, NULL, &error), STATUS_INTERNAL_ERROR, "[KVS GStreamer %s] GStreamer initialization failed");
+    CHK_ERR(gst_init_check(NULL, NULL, &error), STATUS_INTERNAL_ERROR, "[KVS GStreamer %s] GStreamer initialization failed");
 
     CHK_ERR(pSampleStreamingSession != NULL, STATUS_NULL_ARG, "[KVS Gstreamer %s] Sample streaming session is NULL", roleType);
 
@@ -136,12 +137,23 @@ PVOID receiveGstreamerAudioVideo(PVOID args)
 
     // This part can be in our GUI code, we can pass the track.codec and media-type and recieve the set up gst pipeline,
     // this part also creates a new GstCaps that contains one GstStructure with name appsrc-video
+    g_print("Going to if (setupPipelineCallback) \n");
     if (setupPipelineCallback)
     {
+    g_print("Going to setup pipeline \n");
         setupPipelineCallback(pipeline);
     }
+
+    videocaps = gst_caps_new_simple("video/x-h264",
+                                     "stream-format", G_TYPE_STRING, "byte-stream",
+                                     "alignment", G_TYPE_STRING, "au",
+                                     "profile", G_TYPE_STRING, "baseline",
+                                     "height", G_TYPE_INT, DEFAULT_VIDEO_HEIGHT_PIXELS,
+                                     "width", G_TYPE_INT, DEFAULT_VIDEO_WIDTH_PIXELS,
+                                     NULL);
+    
      // also add audio caps
-    CHK_ERR(pipeline != NULL, STATUS_INTERNAL_ERROR, "[KVS GStreamer %s] Pipeline is NULL", roleType);
+    CHK_ERR(pipeline.get() != NULL, STATUS_INTERNAL_ERROR, "[KVS GStreamer %s] Pipeline is NULL", roleType);
 
     appsrcVideo = gst_bin_get_by_name(GST_BIN(pipeline.get()), "appsrc-video"); // retrieves element from bin
     CHK_ERR(appsrcVideo != NULL, STATUS_INTERNAL_ERROR, "[KVS GStreamer %s] Cannot find appsrc video", roleType);

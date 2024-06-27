@@ -42,8 +42,10 @@ endif()
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/inc
   ${CMAKE_CURRENT_SOURCE_DIR}/external
+  ${CMAKE_CURRENT_SOURCE_DIR}/Utils/inc
+   ${CMAKE_CURRENT_SOURCE_DIR}/SonoStationGUI/inc
 )
-
+add_subdirectory(${CMAKE_SOURCE_DIR}/SonoStationGUI)
 
 find_package(Threads REQUIRED)
 find_package(PkgConfig REQUIRED)
@@ -54,7 +56,6 @@ find_library(SRTP_LIBRARIES srtp2 REQUIRED )
 find_library(USRSCTP_LIBRARIES usrsctp REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Qt6 COMPONENTS Core Widgets REQUIRED)
-
 find_package(VTK COMPONENTS
   CommonColor
   CommonCore
@@ -133,8 +134,62 @@ add_executable(
  ${LIBWEBSOCKETS_LIBRARIES}
  ${OpenCV_LIBS})
  
+ file( GLOB QT_SOURCE_FILES ./SonoStationGUI/inc/*.h* )
+qt6_wrap_cpp(QT_SRC ${QT_SOURCE_FILES})
+
+ add_executable(
+    simpleViewer
+    src/Common.c
+    src/GstAudioVideoReceiver.cpp
+    simpleViewer.cpp
+    ${QT_SRC}
+  )
+ target_link_libraries(simpleViewer 
+ ${EXTRA_DEPS} 
+ ${GST_SAMPLE_LIBRARIES} 
+ ${KVS_LIBS}                               
+ ${OPENSSL_LIBRARIES}
+ ${SRTP_LIBRARIES}
+ ${USRSCTP_LIBRARIES}
+ ${LIBWEBSOCKETS_LIBRARIES}
+ ${OpenCV_LIBS}
+ Qt6::Core Qt6::Widgets ${VTK_LIBRARIES})
+  
+ add_executable(
+    bMaster
+    src/Common.c
+    basicMaster.cpp
+    src/GstAudioVideoReceiver.cpp
+        ${QT_SRC}
+  )
+ target_link_libraries(bMaster 
+ ${GST_SAMPLE_LIBRARIES} 
+ ${KVS_LIBS}                               
+ ${OPENSSL_LIBRARIES}
+ ${OpenCV_LIBS}
+  Qt6::Core Qt6::Widgets ${VTK_LIBRARIES}
+ )
+
+  add_executable(
+    bViewer
+    src/Common.c
+    src/GstAudioVideoReceiver.cpp
+    basicViewer.cpp
+    ${QT_SRC}
+  )
+ target_link_libraries(bViewer 
+ ${GST_SAMPLE_LIBRARIES} 
+ ${KVS_LIBS}                               
+ ${OpenCV_LIBS}
+ Qt6::Core Qt6::Widgets ${VTK_LIBRARIES})
+ 
  target_compile_options(simpleVVideo PRIVATE -fpermissive)
  target_compile_options(simpleMaster PRIVATE -fpermissive)
+target_compile_options(simpleViewer PRIVATE -fpermissive)
+ target_compile_options(bMaster PRIVATE -fpermissive)
+target_compile_options(bViewer PRIVATE -fpermissive)
+
+
 
 if(BUILD_TESTS)
   # Find all test source files

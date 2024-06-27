@@ -1,10 +1,13 @@
 #include "Samples.h"
-#include <gst/gst.h>
-#include <gst/app/gstappsink.h>
+#include "CameraDemo.hpp"
+#include "callback.hpp"
+#include <QApplication>
+#include <QThread>
+#include <iostream>
+#include <csignal>
 
+// External configuration
 extern PSampleConfiguration gSampleConfiguration;
-// #define VERBOSE
-
 GstElement *senderPipeline = NULL;
 
 GstFlowReturn on_new_sample(GstElement *sink, gpointer data, UINT64 trackid)
@@ -181,24 +184,27 @@ PVOID sendGstreamerAudioVideo(PVOID args)
 
     CHAR rtspPipeLineBuffer[RTSP_PIPELINE_MAX_CHAR_COUNT];
 
-    // senderPipeline =
-    //     gst_parse_launch("v4l2src device=/dev/video0 ! queue ! videoconvert ! video/x-raw,format=NV12,width=1280,height=720,framerate=10/1 ! x264enc "
-    //                      "bframes=0 speed-preset=veryfast bitrate=512 byte-stream=TRUE tune=zerolatency ! "
-    //                      "video/x-h264,stream-format=byte-stream,alignment=au,profile=baseline ! appsink sync=TRUE emit-signals=TRUE "
-    //                      "name=appsink-video autoaudiosrc ! "
-    //                      "queue leaky=2 max-size-buffers=400 ! audioconvert ! audioresample ! opusenc name=sampleAudioEncoder ! "
-    //                      "audio/x-opus,rate=48000,channels=2 ! appsink sync=TRUE emit-signals=TRUE name=appsink-audio",
-    //                      &error);
-
-  senderPipeline =
-        gst_parse_launch("v4l2src device=/dev/video0 ! queue ! videoconvert ! video/x-raw,format=NV12,width=1280,height=720! x264enc "
+#ifdef _WIN32
+    senderPipeline =
+        gst_parse_launch("ksvideosrc ! queue ! videoconvert ! video/x-raw,format=NV12,width=1280,height=720,framerate=10/1 ! x264enc "
                          "bframes=0 speed-preset=veryfast bitrate=512 byte-stream=TRUE tune=zerolatency ! "
                          "video/x-h264,stream-format=byte-stream,alignment=au,profile=baseline ! appsink sync=TRUE emit-signals=TRUE "
                          "name=appsink-video autoaudiosrc ! "
                          "queue leaky=2 max-size-buffers=400 ! audioconvert ! audioresample ! opusenc name=sampleAudioEncoder ! "
                          "audio/x-opus,rate=48000,channels=2 ! appsink sync=TRUE emit-signals=TRUE name=appsink-audio",
                          &error);
-    CHK_ERR(senderPipeline != NULL, STATUS_NULL_ARG, "[KVS Gstreamer Sender] Pipeline is NULL");
+
+#elif __linux__
+    senderPipeline =
+        gst_parse_launch("v4l2src device=/dev/video0 ! queue ! videoconvert ! video/x-raw,format=NV12,width=1280,height=720,framerate=10/1 ! x264enc "
+                         "bframes=0 speed-preset=veryfast bitrate=512 byte-stream=TRUE tune=zerolatency ! "
+                         "video/x-h264,stream-format=byte-stream,alignment=au,profile=baseline ! appsink sync=TRUE emit-signals=TRUE "
+                         "name=appsink-video autoaudiosrc ! "
+                         "queue leaky=2 max-size-buffers=400 ! audioconvert ! audioresample ! opusenc name=sampleAudioEncoder ! "
+                         "audio/x-opus,rate=48000,channels=2 ! appsink sync=TRUE emit-signals=TRUE name=appsink-audio",
+                         &error);
+#endif
+    CHK_ERR(senderPipeline != NULL, STATUS_NULL_ARG, "[KVS Gstreamer Master] Pipeline is NULL");
 
     // Retrieve the video appsink element by name from the senderPipeline
     appsinkVideo = gst_bin_get_by_name(GST_BIN(senderPipeline), "appsink-video");
@@ -210,7 +216,7 @@ PVOID sendGstreamerAudioVideo(PVOID args)
     if (!(appsinkVideo != NULL || appsinkAudio != NULL))
     {
         // Log an error message indicating the appsink elements could not be found
-        DLOGE("[KVS GStreamer Sender] sendGstreamerAudioVideo(): cant find appsink, operation returned status code: 0x%08x", STATUS_INTERNAL_ERROR);
+        DLOGE("[KVS GStreamer Master] sendGstreamerAudioVideo(): cant find appsink, operation returned status code: 0x%08x", STATUS_INTERNAL_ERROR);
         // Jump to the cleanup section to free resources and exit the function
         goto CleanUp;
     }
@@ -281,114 +287,161 @@ CleanUp:
 
     return (PVOID)(ULONG_PTR)retStatus;
 }
+// Main function
+INT32 main(INT32 argc, CHAR *argv[]) {
+    // Initialize Qt application
+    QApplication app(argc, argv);
+    gst_init(&argc, &argv);
 
-INT32 main(INT32 argc, CHAR *argv[])
-{
-    STATUS retStatus = STATUS_SUCCESS;
+    // Create the CameraDemo instance
+    wosler::demo::CameraDemo demo;
+    registerSetupPipelineCallback([&demo](std::shared_ptr<GstElement> &pipeline) {
+        demo.SetupPipeline(pipeline);
+    });
+    demo.show();
+
+    // Perform WebRTC and other tasks in separate thread
+    QThread::create([argc, argv]() {
+        STATUS retStatus = STATUS_SUCCESS;
+    RtcSessionDescriptionInit offerSessionDescriptionInit;
+    UINT32 buffLen = 0;
+    SignalingMessage message;
     PSampleConfiguration pSampleConfiguration = NULL;
-    PCHAR pChannelName;
+    PSampleStreamingSession pSampleStreamingSession = NULL;
     RTC_CODEC audioCodec = RTC_CODEC_OPUS;
     RTC_CODEC videoCodec = RTC_CODEC_H264_PROFILE_42E01F_LEVEL_ASYMMETRY_ALLOWED_PACKETIZATION_MODE;
+    BOOL locked = FALSE;
+    PCHAR pChannelName;
+    CHAR clientId[256];
 
     SET_INSTRUMENTED_ALLOCATORS();
     UINT32 logLevel = setLogLevel();
 
+#ifndef _WIN32
     signal(SIGINT, sigintHandler);
+#endif
 
     pChannelName = argc > 1 ? argv[1] : SAMPLE_CHANNEL_NAME;
 
-    CHK_STATUS(createSampleConfiguration(pChannelName, SIGNALING_CHANNEL_ROLE_TYPE_MASTER, TRUE, TRUE, logLevel, &pSampleConfiguration));
-
-    if (argc > 3 && STRCMP(argv[3], "testsrc") == 0)
-    {
-        if (argc > 4)
-        {
-            if (!STRCMP(argv[4], AUDIO_CODEC_NAME_OPUS))
-            {
-                audioCodec = RTC_CODEC_OPUS;
-            }
-        }
-
-        if (argc > 5)
-        {
-            if (!STRCMP(argv[5], VIDEO_CODEC_NAME_H265))
-            {
-                videoCodec = RTC_CODEC_H265;
-            }
-        }
-    }
-
-    pSampleConfiguration->videoSource = sendGstreamerAudioVideo;
+    CHK_STATUS(createSampleConfiguration(pChannelName, SIGNALING_CHANNEL_ROLE_TYPE_VIEWER, TRUE, TRUE, logLevel, &pSampleConfiguration));
     pSampleConfiguration->mediaType = SAMPLE_STREAMING_AUDIO_VIDEO;
+    pSampleConfiguration->receiveAudioVideoSource = receiveGstreamerAudioVideo;
     pSampleConfiguration->audioCodec = audioCodec;
     pSampleConfiguration->videoCodec = videoCodec;
-    // pSampleConfiguration->receiveAudioVideoSource = receiveGstreamerAudioVideo;
-    pSampleConfiguration->customData = (UINT64)pSampleConfiguration;
-    pSampleConfiguration->srcType = DEVICE_SOURCE; // Default to device source (autovideosrc and autoaudiosrc)
-    /* Initialize GStreamer */
+    pSampleConfiguration->videoSource = sendGstreamerAudioVideo;
+    pSampleConfiguration->srcType = DEVICE_SOURCE;
+    DLOGI("[KVS Gstreamer Viewer] Streaming audio and video");
     gst_init(&argc, &argv);
-    DLOGI("[KVS Gstreamer Master] Finished initializing GStreamer and handlers");
-
-    DLOGI("[KVS Gstreamer Master] Streaming audio and video");
-
-    DLOGI("[KVS GStreamer Master] Using device source in GStreamer");
-
-    DLOGI("[KVS GStreamer Master] streaming type audio-video");
-
-    // Initalize KVS WebRTC. This must be done before anything else, and must only be done once.
+    // Initialize KVS WebRTC. This must be done before anything else, and must only be done once.
     CHK_STATUS(initKvsWebRtc());
-    DLOGI("[KVS GStreamer Master] KVS WebRTC initialization completed successfully");
+    DLOGI("[KVS Gstreamer Viewer] KVS WebRTC initialization completed successfully");
 
-    CHK_STATUS(initSignaling(pSampleConfiguration, SAMPLE_MASTER_CLIENT_ID));
-    DLOGI("[KVS GStreamer Master] Channel %s set up done ", pChannelName);
+    SPRINTF(clientId, "%s_%u", SAMPLE_VIEWER_CLIENT_ID, RAND() % MAX_UINT32); // results in clientId being ConsumerViewer_random
+    CHK_STATUS(initSignaling(pSampleConfiguration, clientId));
+    DLOGI("[KVS Gstreamer Viewer] Signaling client connection established");
 
-    // Checking for termination
-    CHK_STATUS(sessionCleanupWait(pSampleConfiguration));
-    DLOGI("[KVS GStreamer Master] Streaming session terminated");
+    // Initialize streaming session
+    MUTEX_LOCK(pSampleConfiguration->sampleConfigurationObjLock);
+    locked = TRUE;
+    CHK_STATUS(createSampleStreamingSession(pSampleConfiguration, NULL, FALSE, &pSampleStreamingSession));
+    DLOGI("[KVS Gstreamer Viewer] Creating streaming session...completed");
+    pSampleConfiguration->sampleStreamingSessionList[pSampleConfiguration->streamingSessionCount++] = pSampleStreamingSession;
+
+    MUTEX_UNLOCK(pSampleConfiguration->sampleConfigurationObjLock);
+    locked = FALSE;
+
+    MEMSET(&offerSessionDescriptionInit, 0x00, SIZEOF(RtcSessionDescriptionInit));
+
+    offerSessionDescriptionInit.useTrickleIce = pSampleStreamingSession->remoteCanTrickleIce;
+    CHK_STATUS(setLocalDescription(pSampleStreamingSession->pPeerConnection, &offerSessionDescriptionInit));
+    DLOGI("[KVS Gstreamer Viewer] Completed setting local description");
+
+    if (!pSampleConfiguration->trickleIce) // quicker connection than regular ice
+    {
+        DLOGI("[KVS Gstreamer Viewer] Non trickle ice. Wait for Candidate collection to complete");
+        MUTEX_LOCK(pSampleConfiguration->sampleConfigurationObjLock);
+        locked = TRUE;
+
+        while (!ATOMIC_LOAD_BOOL(&pSampleStreamingSession->candidateGatheringDone))
+        {
+            CHK_WARN(!ATOMIC_LOAD_BOOL(&pSampleStreamingSession->terminateFlag), STATUS_OPERATION_TIMED_OUT,
+                     "application terminated and candidate gathering still not done");
+            CVAR_WAIT(pSampleConfiguration->cvar, pSampleConfiguration->sampleConfigurationObjLock, 5 * HUNDREDS_OF_NANOS_IN_A_SECOND);
+        }
+
+        MUTEX_UNLOCK(pSampleConfiguration->sampleConfigurationObjLock);
+        locked = FALSE;
+
+        DLOGI("[KVS Gstreamer Viewer] Candidate collection completed");
+    }
+
+    CHK_STATUS(createOffer(pSampleStreamingSession->pPeerConnection, &offerSessionDescriptionInit));
+    DLOGI("[KVS Gstreamer Viewer] Offer creation successful");
+
+    DLOGI("[KVS Gstreamer Viewer] Generating JSON of session description....");
+    CHK_STATUS(serializeSessionDescriptionInit(&offerSessionDescriptionInit, NULL, &buffLen));
+
+    if (buffLen >= SIZEOF(message.payload))
+    {
+        DLOGE("[KVS Gstreamer Viewer] serializeSessionDescriptionInit(): operation returned status code: 0x%08x ", STATUS_INVALID_OPERATION);
+        retStatus = STATUS_INVALID_OPERATION;
+        goto CleanUp;
+    }
+
+    CHK_STATUS(serializeSessionDescriptionInit(&offerSessionDescriptionInit, message.payload, &buffLen));
+
+    message.version = SIGNALING_MESSAGE_CURRENT_VERSION;
+    message.messageType = SIGNALING_MESSAGE_TYPE_OFFER;
+    STRCPY(message.peerClientId, SAMPLE_MASTER_CLIENT_ID); // the master id its connecting to
+    message.payloadLen = (buffLen / SIZEOF(CHAR)) - 1;
+    message.correlationId[0] = '\0';
+    DLOGI("[KVS Gstreamer Viewer] sending offer message now");
+    CHK_STATUS(signalingClientSendMessageSync(pSampleConfiguration->signalingClientHandle, &message)); // sending the offer message
+    DLOGI("[KVS Gstreamer Viewer] sent offer message");
+    // Block until interrupted
+    while (!ATOMIC_LOAD_BOOL(&pSampleConfiguration->interrupted) && !ATOMIC_LOAD_BOOL(&pSampleStreamingSession->terminateFlag))
+    {
+        THREAD_SLEEP(HUNDREDS_OF_NANOS_IN_A_SECOND);
+    }
 
 CleanUp:
 
     if (retStatus != STATUS_SUCCESS)
     {
-        DLOGE("[KVS GStreamer Master] Terminated with status code 0x%08x", retStatus);
+        DLOGE("[KVS Gstreamer Viewer] Terminated with status code 0x%08x", retStatus);
     }
 
-    DLOGI("[KVS GStreamer Master] Cleaning up....");
+    DLOGI("[KVS Gstreamer Viewer] Cleaning up....");
 
+    if (locked)
+    {
+        MUTEX_UNLOCK(pSampleConfiguration->sampleConfigurationObjLock);
+    }
+
+    if (pSampleConfiguration->enableFileLogging)
+    {
+        freeFileLogger();
+    }
     if (pSampleConfiguration != NULL)
     {
-        // Kick of the termination sequence
-        ATOMIC_STORE_BOOL(&pSampleConfiguration->appTerminateFlag, TRUE);
-
-        if (pSampleConfiguration->mediaSenderTid != INVALID_TID_VALUE)
-        {
-            THREAD_JOIN(pSampleConfiguration->mediaSenderTid, NULL);
-        }
-
-        if (pSampleConfiguration->enableFileLogging)
-        {
-            freeFileLogger();
-        }
         retStatus = freeSignalingClient(&pSampleConfiguration->signalingClientHandle);
         if (retStatus != STATUS_SUCCESS)
         {
-            DLOGE("[KVS GStreamer Master] freeSignalingClient(): operation returned status code: 0x%08x", retStatus);
+            DLOGE("[KVS Gstreamer Viewer] freeSignalingClient(): operation returned status code: 0x%08x ", retStatus);
         }
 
         retStatus = freeSampleConfiguration(&pSampleConfiguration);
         if (retStatus != STATUS_SUCCESS)
         {
-            DLOGE("[KVS GStreamer Master] freeSampleConfiguration(): operation returned status code: 0x%08x", retStatus);
+            DLOGE("[KVS Gstreamer Viewer] freeSampleConfiguration(): operation returned status code: 0x%08x ", retStatus);
         }
     }
-    DLOGI("[KVS Gstreamer Master] Cleanup done");
+    DLOGI("[KVS Gstreamer Viewer] Cleanup done");
 
     RESET_INSTRUMENTED_ALLOCATORS();
 
-    // https://www.gnu.org/software/libc/manual/html_node/Exit-Status.html
-    // We can only return with 0 - 127. Some platforms treat exit code >= 128
-    // to be a success code, which might give an unintended behaviour.
-    // Some platforms also treat 1 or 0 differently, so it's better to use
-    // EXIT_FAILURE and EXIT_SUCCESS macros for portability.
-    return STATUS_FAILED(retStatus) ? EXIT_FAILURE : EXIT_SUCCESS;
+    })->start();
+
+    // Start the Qt event loop in the main thread
+    return app.exec();
 }
