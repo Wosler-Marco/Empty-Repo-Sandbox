@@ -26,7 +26,7 @@
 *.la
 *.a
 *.lib
-!external/aws-cpp-sdk-all/**
+!external/AWS/**
 
 # Executables
 *.exe
